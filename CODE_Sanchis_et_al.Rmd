@@ -1,0 +1,655 @@
+---
+title: "Analysis of RNA-seq data available in public repositories"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE)
+```
+
+
+
+# Analysis of RNA-seq data available in public repositories
+
+Pablo Sanchis1,2\*,Rosario Lavignolle1,2\*, Mercedes Abbate1,2, Sofía Lage-Vickers1,2, Elba Vazquez1,2, Javier Cotignola1,2, Juan Bizzotto1,2, Geraldine Gueron1,2 **⤉**.
+
+1 Universidad de Buenos Aires, Facultad de Ciencias Exactas y Naturales, Departamento de Química Biológica, Buenos Aires C1428EGA, Argentina;
+
+2 CONICET - Universidad de Buenos Aires, Instituto de Química Biológica de la Facultad de Ciencias Exactas y Naturales (IQUIBICEN), Buenos Aires C1428EGA, Argentina.
+
+\*These authors equally contributed to the study and are co-first authors. Description of contributions are listed in the _Author Contribution_ section.
+
+⤉Corresponding author: Geraldine Gueron
+
+Departamento de Química Biológica, Facultad de Ciencias Exactas y Naturales, IQUIBICEN-CONICET, Universidad de Buenos Aires, Intendente Guiraldes 2160, CP1428, Buenos Aires, Argentina. Telephone: +5491144087796, Fax 47885755.
+
+Lead contact: Geraldine Gueron (ggueron@iquibicen.fcen.uba.ar).
+
+Correspondence:ggueron@iquibicen.fcen.uba.ar
+
+#
+
+# Summary
+
+Differential gene expression analysis is widely used to study changes in gene expression profiles between two or more groups of samples (e.g., physiologic _vs_. pathologic conditions; pre- _vs_. post-treatment, infected _vs_. non-infected tissues). This protocol aims to identify gene expression changes in apre-selected set of genes associated with SARS-CoV-2 viral infection and host cell antiviral response, and subsequent gene expression association with phenotypic features using samples submitted to public repositories.
+
+For complete details on the use and outcome of this informatics analysis please refer to (Bizzotto _et al._, 2020).
+
+# Before You Begin
+
+## Download R and RStudio
+
+**Timing: 1 h**
+
+1. R is a free software environment for statistical computing and graphics. It runs on UNIX, Windows and MacOS.
+
+  1. To download and install R go to [https://www.r-project.org/](https://www.r-project.org/)(R Core Team, 2013). The current pipeline was performed using R version 3.6.2.
+
+1. RStudio is an integrated development environment (IDE) for R. It allows to easily execute the R codes, plot graphics, and manage the workspace in a multipanel interphase.
+
+  1. To download and install RStudio go to [https://rstudio.com/products/rstudio/](https://rstudio.com/products/rstudio/)(RStudio Team, 2020).
+
+## Download required packages in RStudio
+
+**Timing: 1 h**
+
+1. Users must first download the required packages (listed in the Key Resources Table). They can be downloaded through Bioconductor, which provides tools for the analysis and comprehension of high-throughput genomic data. BiocManager::install() is the recommended command to install packages (for detailed information on why BiocManager::install() is preferred to the standard R packages installation please read [https://www.bioconductor.org/install/#why-biocmanagerinstall](https://www.bioconductor.org/install/#why-biocmanagerinstall)):
+
+1. Install the packages needed for the analysis. See [**Troubleshooting 1**](#_Problem_1:):
+
+
+```{r 1, eval=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE, eval=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+ BiocManager::install(c("DESeq2", "GEOquery", "canvasXpress", "ggplot2",
+                        "clinfun", "GGally", "factoextra"))
+```
+
+
+1. Once all packages are installed, they need to be loaded:
+
+
+```{r 2, message=FALSE, warning=FALSE, paged.print=FALSE, cache=TRUE}
+{
+library(DESeq2)
+library(GEOquery)
+library(canvasXpress)
+library(ggplot2)
+library(clinfun)
+library(GGally)
+library(factoextra)
+}
+```
+
+
+
+## Dataset selection
+
+**Timing: 2 days**
+
+1. When using datasets from public repositories, the key step is to identify a dataset (or datasets) that comply with the eligibility criteria and that contains the sample information required for the analysis.
+
+  1. We suggest browsing Gene Expression Omnibus (GEO: [https://www.ncbi.nlm.nih.gov/gds](https://www.ncbi.nlm.nih.gov/gds), (Barrett _et al._, 2012)) and ArrayExpress ([https://www.ebi.ac.uk/arrayexpress/](https://www.ebi.ac.uk/arrayexpress/), (Athar _et al._, 2019)) repositories because they gather multiple high-throughput genomics datasets. However, there are several public repositories that might be more suitable for other types of studies.
+
+These repositories allow to download raw sequencing data (.fastq sequencing files) and/or pre-processed files (tab-delimited.txt files containing matrices with sequence read counts after trimming and alignment to the reference genome). The pre-processed files may contain a raw-counts matrix (non-normalized) or a normalized counts matrix (see below for more details). Sample information is also available to download. Finally, the platform used, and pre-processing algorithm (when data are pre-processed) are specified.
+
+We strongly recommend researchers to thoroughly evaluate the type of data submitted, study design, number of samples and any other relevant information that might help to analyze the samples and draw statistically valid conclusions.
+
+**NOTE** : The analysis of raw sequencing data requires additional processing (e.g., alignment to reference transcriptome) which is not described in the current protocol.
+
+  1. Our eligibility criteria for (Bizzotto _et al._, 2020) was: (i) publicly available transcriptome data; ii) detailed sample/patient information; (iii) detailed protocol information; (iv) ≥ 60 samples. We selected the GSE152075 dataset from GEO which contained RNA-seq data from 430 SARS-CoV-2 positive and 54 negative patients (Lieberman _et al._, 2020). We downloaded the gene expression aligned data matrix (tab-delimited .txt file with reads pseudo-aligned to the human reference transcriptome). Clinico-pathological information included age, gender, and viral load (expressed as cycle threshold (Ct) by RT-qPCR for the N1 viral gene at time of diagnosis). The interpretation for viral load was as follows: the lower the Ct, the higher the viral load. This phenotypic data can be downloaded directly in RStudio as explained in the &quot;RNA-seq data organization and counts normalization&quot; section.
+
+# Key Resources Table
+
+| REAGENT or RESOURCE | SOURCE | IDENTIFIER |
+| --- | --- | --- |
+| Deposited Data |
+| In vivo antiviral host response to SARS-CoV-2 by viral load, sex, and age [dataset I] | NCBI Gene Expression Omnibus | GSE152075 |
+| Software and Algorithms |
+| R software | (R Core Team, 2013) | https://www.r-project.org/ |
+| RStudio | (RStudio Team, 2020) | https://rstudio.com/ |
+| DEseq2 v1.28.1 package | (Love, Huber and Anders, 2014) | https://bioconductor.org/packages/release/bioc/html/DESeq2.html |
+| ggplot2 package | (Wickham, 2016) | https://ggplot2.tidyverse.org/ |
+| GGally package | (Schloerke _et al._, 2020) | https://github.com/ggobi/ggally/ |
+| canvasXpress package | (Neuhaus and Brett, 2020) | http://www.canvasxpress.org/ |
+| factoextra package | (Kassambara and Mundt, 2020) | https://rpkgs.datanovia.com/factoextra/index.html |
+| clinfun package | (Seshan, 2018) | https://github.com/veseshan/clinfun |
+| GEOquery package | (Davis and Meltzer, 2007) | https://www.bioconductor.org/packages/release/bioc/html/GEOquery.html |
+
+**NOTE:** detailed information on the usage of the different packages may be found in the links provided in the identifier column.
+
+# Materials and Equipment
+
+For this bioinformatics analysis we used a laptop with an Intel Core i5 8th generation processor, 8 GB RAM memory and Windows 10. No high-performance computing clusters were needed for the analysis of the data. Internet connection is required for downloading R packages and data matrixes.
+
+# Step-by-Step Method Details
+
+The flow chart for data processing is included in Figure 1.
+
+## Download and prepare the data matrix for analysis
+
+**Timing: 2 h**
+
+You can download the experiment information and clinical data directly from GEO using the GEOquery package:
+
+1. The series matrix file is a text file that includes a tab-delimited value-matrix for each sample containing the phenotypic/clinical and experimental data of a given dataset. In the GEO webtool, there is a hyperlink to the series matrix, called &quot;Series Matrix File(s)&quot;. To download the series matrix file directly to the R environment use the getGEO command:
+
+
+```{r 3, message=FALSE, warning=FALSE, paged.print=FALSE}
+#data <- getGEO(GEO = ["GSE152075"]) 
+#replace the text between [] with the GSE of your choice and remove the [].
+
+data <- getGEO(GEO = "GSE152075") 
+
+#print de first five rows of the matrix to see matrix information 
+
+head(data)
+```
+
+
+
+1. You may now extract the phenotypic/clinical data matrix from the series matrix:
+
+
+```{r 4, message=FALSE, warning=FALSE, paged.print=FALSE}
+clindata <- data[["GSE152075_series_matrix.txt.gz"]]@phenoData@data
+  
+#replace the GSE with the one of your choice. Do not remove the [] in this line.
+
+#print de first five rows of the matrix to see the information included in columns of interest
+
+head(clindata[,c(1,2,8,40,39,42)])
+```
+
+
+
+1. Download and save on your computer the raw-counts matrix from GEO website. This matrix is a tab-delimited txt. file containing the counts for every gene aligned from a RNA-seq experiment. After downloading it, load the matrix into RStudio:
+
+```{r 5, message=FALSE, warning=FALSE, paged.print=FALSE}
+#raw_counts <- read.delim("[C:/Users/File/Location/GSE152075_raw_counts_GEO.txt.gz]", stringsAsFactors=FALSE, sep = " ") 
+  
+#replace the text between [] with the directory path to the GSE_raw_counts_GEO.txt.gz file you downloaded and remove the [].
+
+#another way to download the raw count matrix directly from RStudio is running the following command:
+
+url="https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE152075&format=file&file=GSE152075%5Fraw%5Fcounts%5FGEO%2Etxt%2Egz"
+download.file(url, "raw_reads.gz")
+
+raw_counts <- read.delim("raw_reads.gz", stringsAsFactors=FALSE, sep = " ")
+#print de first five rows of the raw counts matrix to see how information is organized
+
+head(raw_counts[,c(1:10)])
+```
+
+**NOTE:** The sequencing data for GSE152075 was submitted as raw-counts in a separate file from the experimental and clinical data. ([https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE152075](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE152075); GSE152075\_raw\_counts\_GEO.txt.gz); therefore, it was downloaded separately.. For datasets with pre-processed/normalized data, the counts matrix might be included in the series matrix file downloaded in step 1. Troubleshooting **2**.
+
+## RNA-seq data organization and counts normalization
+
+**Timing: 1 h**
+
+Before performing differential gene expression analysis, it is required to normalize the read counts if the raw-counts matrix was downloaded. This normalization step allows to compare gene expression (read counts) among samples (Evans, Hardin and Stoebel, 2018). It is also recommended to correct for batch effect if multiple batches of experiments were performed. If the user&#39;s dataset is already normalized, then go directly to step 6.
+
+1. Gene expression normalization:
+
+1. Before sample normalization, data should be converted and organized to the format required for further analysis (data format and organization might vary for different packages). Troubleshooting **3**.
+
+```{r 6, message=FALSE, warning=FALSE, paged.print=FALSE}
+raw_counts <- as.matrix(raw_counts)   
+#rownames(clindata) <- clindata$[title]   
+
+#replace the rownames of clindata (sampleID) with the same sample name [title] of [raw_counts]. This will help to match sample names in both matrixes. Remove the []
+
+rownames(clindata) <- clindata$title
+
+all(rownames(clindata) %in% colnames(raw_counts))  
+#the outcome should be TRUE
+
+all(colnames(raw_counts) %in% rownames(clindata))  
+
+#the outcome should be TRUE
+```
+
+1. Make sure that the grouping variables are factors. We also changed the original names of the columns containing the relevant variables to make them shorter and easier to work with.
+
+
+```{r 7, message=FALSE, warning=FALSE, paged.print=FALSE}
+colnames(clindata)[colnames(clindata) == "sequencing_batch:ch1"] <- "batch"
+clindata$batch <- as.factor(clindata$batch)
+colnames(clindata)[colnames(clindata) == "n1_ct:ch1"] <- "ct"
+colnames(clindata)[colnames(clindata) == "sars-cov-2 positivity:ch1"] <- "positivity"
+clindata$positivity[clindata$positivity == "pos"] <- "COVID19"
+clindata$positivity[clindata$positivity == "neg"] <- "HEALTHY"
+clindata$positivity <- as.factor(clindata$positivity)
+```
+
+
+
+1. Merge the read counts and clinical data matrixes into a DESeqDataSet object using the DESeq2 package:
+
+```{r 8, message=FALSE, warning=FALSE, paged.print=FALSE}
+# dds <- DESeqDataSetFromMatrix(countData = raw_counts,
+#                           	colData = clindata,
+#                           	design = ~ [positivity + batch])
+
+
+#the design argument is a formula that expresses how the counts for each gene depend on the variables in colData. We included the variable batch to adjust for batch effect. Replace the variables between [] with the variables of your choice and remove the [].
+
+
+ dds <- DESeqDataSetFromMatrix(countData = raw_counts,
+                           	colData = clindata,
+                           	design = ~ positivity + batch)
+
+
+
+#print de first five rows of the merged data to check how it is organized
+
+head(dds)
+```
+
+
+1. Normalization by estimation of size factor:
+
+```{r 9, message=FALSE, warning=FALSE, paged.print=FALSE}
+dds <- estimateSizeFactors(dds)
+
+#print de first five rows of the normalized data 
+
+head(dds)
+
+```
+
+
+1. Create a new table with the normalized read counts (gene expression) for all genes:
+
+```{r 10, message=FALSE, warning=FALSE, paged.print=FALSE}
+norm_counts <- counts(dds, normalized=TRUE)
+
+#print de first five rows of the normalized data 
+
+head(norm_counts[,c(1:10)])
+```
+
+1. For our study, we converted the continuous variables (e.g., age, viral load) into factor/strata variables (e.g., 10-year age ranges, low/medium/high viral load). The code below shows an example on how to stratify the viral load and age (after duplicating the original variable in order to not overwrite the original data).
+
+
+```{r 11, message=FALSE, warning=FALSE, paged.print=FALSE}
+#stratify viral load
+
+{
+   clindata$viral_load <- clindata$ct
+   clindata$viral_load[clindata$viral_load == "N/A"] <- "Negative"
+   clindata$viral_load[clindata$viral_load > 24 & clindata$viral_load != 
+                  "Unknown" & clindata$viral_load != "Negative"] <- 
+ 	            "LOW"
+   clindata$viral_load[clindata$viral_load <= 24 & clindata$viral_load
+                      >= 19] <- "MEDIUM"
+   clindata$viral_load[clindata$viral_load < 19] <- "HIGH"
+   clindata$viral_load <- as.factor(clindata$viral_load)
+   clindata$viral_load <- factor(clindata$viral_load, levels = 
+                       c("Negative", "LOW", "MEDIUM", "HIGH", 
+                         "Unknown"))
+
+   clindata$positivity <- factor(clindata$positivity, levels = 
+                       c("HEALTHY", "COVID19"))
+}
+
+#stratify age
+
+{
+   clindata$age_cat <- clindata$`age:ch1`
+   clindata$age_cat[clindata$`age:ch1` < 30] = "< 30"
+   clindata$age_cat[clindata$`age:ch1` >= 30 & clindata$`age:ch1` < 40] ="30s"
+   clindata$age_cat[clindata$`age:ch1` >= 40 & clindata$`age:ch1`< 50] ="40s"
+   clindata$age_cat[clindata$`age:ch1` >= 50 & clindata$`age:ch1` < 60] ="50s"
+   clindata$age_cat[clindata$`age:ch1` >= 60 & clindata$`age:ch1` < 70] ="60s"
+   clindata$age_cat[clindata$`age:ch1` >= 70] ="70+"
+   clindata$age_cat[clindata$`age:ch1` == "Unknown"] = NA
+}
+
+```
+
+
+
+**NOTE** : This is an optional step depending on your variables and analysis.
+
+## Differential gene expression analysis across different strata
+
+**Timing: 1 day**
+
+**NOTE** : As mentioned on Bizzotto _et al_., some samples were removed from the analysis since they were considered to have low quality read sequencing (\&gt;70% genes with 0 counts). Because this might not apply to all protocols, we did not include the code for this filtering in the main manuscript, but it was included in the Troubleshooting 4. Therefore, the outcomes for this protocol might slightly differ from the outcome published on Bizzotto _et al_. (Bizzotto _et al._, 2020), but this omission does not change the results and interpretation of the study.
+
+This step aims to compare gene expression across different strata. Below we show, as an example, the differential _MX1_ expression analysis for SARS-CoV-2 positive _vs_. negative patients.
+
+1. As described in our publication, we selected specific genes that could potentially be linked to SARS-CoV-2 infection. For this section, we selected _MX1_ as an example to show. Plot _MX1_ expression for SARS-CoV-2 positive and negative patients (Figure 2A.i): using the following code:
+
+
+```{r 12, message=FALSE, warning=FALSE, paged.print=FALSE}
+{
+   MX1 <- ggplot(NULL, aes(x=clindata$positivity,     
+                           y=log2(t(norm_counts["MX1",]+1)))) +
+   geom_jitter(aes(shape=clindata$positivity, 
+                   color=clindata$positivity), size=3)+
+   xlab(NULL) +
+   ylab("MX1 expression \n log2 (norm counts +1)") +
+   theme(legend.position = "bottom") +
+   theme_bw() +
+   theme(axis.text = element_text(size = 15),
+         axis.title = element_text(size = 15),
+         plot.title =element_text(size = 25),
+         legend.position = 'none') +
+   stat_summary(fun=mean,
+                geom="point",
+                shape= '_',
+                size=14,
+                colour= c('#b53d35', '#066e70'))
+   
+   MX1
+}
+```
+
+
+**NOTE:** For the y argument you must specify a data frame containing the samples in the rows and the variables (genes) in the columns; therefore, we used the t() argument to transpose the data frame &quot;norm\_counts&quot;. Gene expression is expressed as the log2(counts); therefore, and because some samples have 0 counts, it is necessary to add 1 count to all genes for all samples to avoid errors due to log2(0).
+
+1. Export the plot in high quality (complying with most publication standards):
+
+```{r 13, message=FALSE, warning=FALSE, paged.print=FALSE}
+# ggsave(filename="[Name of the file.png]", plot= [name of the plot in RStudio (i.e.: MX1)], device="png", dpi=600, height=10, width=14, units="in")
+
+#replace the text between [] with the filename to be saved. Remove the [].
+
+ggsave(filename="Name of the file.png", plot= MX1, device="png", dpi=600, height=10, width=14, units="in")
+```
+
+
+1. Perform a Wilcoxon test to assess the statistical significance of _MX1_ expression differences between SARS-CoV-2 positive and negative patients (Figure 2A.ii):
+
+
+```{r 14, message=FALSE, warning=FALSE, paged.print=FALSE}
+MX1stat <- wilcox.test(norm_counts["MX1",] ~ clindata$positivity, paired = FALSE)
+MX1stat
+
+```
+
+
+**NOTE:** Please note that Limma and DESeq2 would be more appropriate statistical packages to run when analyzing whole transcriptomes. In (Bizzotto _et al._, 2020), we analyzed a pre-selected set of genes; therefore, the Wilcoxon test can be used to analyze mean differences between groups.
+
+1. In addition, we performed the Jonckheere-Terpstra (Arif _et al._, 2015)trend test to evaluate gene expression trends across ordered strata (e.g., age stratified by 10-year ranges). As an example, here we show the trend test for age _MX1_ expression across age categories in SARS-CoV-2 negative and positive patients (Figure 2B.ii, left and right panels, respectively). The continuous age variable was stratified in 10-year ranges using a code similar to section &quot;RNA-seq data organization and counts normalization - step 5&quot; (not shown).
+
+```{r 15, message=FALSE, warning=FALSE, paged.print=FALSE}
+{
+   p_trend_age <- jonckheere.test(x= log2(t(norm_counts["MX1",]+1))[clindata$positivity == "COVID19"],
+                                  g= factor(clindata$age_cat[clindata$positivity == "COVID19"], ordered=TRUE),
+                                  alternative = "decreasing",
+                                  nperm = 500)
+   p_trend_age
+} 
+```
+**NOTE:** In this code the column &quot;clindata$age\_cat&quot; contains the age stratified by 10-years ranges previously created.
+
+**NOTE** : to perform this test in SARS-CoV-2 negative patients, then replace &quot;COVID19&quot; with &quot;HEALTHY&quot;.
+
+**NOTE** : The argument _alternative_ could be &quot;two.sided&quot;, &quot;increasing&quot; or &quot;decreasing&quot;. Select the best argument for your hypothesis testing.
+
+## Correlation analysis
+
+**Timing: [1 day]**
+
+The aim of this step is to analyze gene expression correlation in the different categorical variables. We also provide the code to perform a pairwise gene expression correlation including the viral load as a third variable plotted in a color scale.
+
+1. Spearman correlation analysis between gene expression levels:
+
+1. Calculate the Spearman coefficients and plot all pairwise correlations. The example below shows the correlation analysis for four genes (_MX1, MX2, ACE2_ and _TMPRSS2_) in SARS-CoV-2 positive and negative patients (Figure 3A):
+
+```{r 16, message=FALSE, warning=FALSE, paged.print=FALSE}
+{
+ pairwise_corr <- ggpairs(as.data.frame(log2(t(norm_counts+1))),
+                         columns = c("MX1", "MX2", "ACE2", "TMPRSS2"),
+                         upper = list(continuous = wrap('cor', 
+                                      method = "spearman", size = 3),
+                                      combo = "box_no_facet", 
+                                      discrete = "count",
+                                      na ="na"),
+                         ggplot2::aes(colour=clindata$positivity, 
+                               shape=clindata$positivity, alpha = 0.01))
+
+pairwise_corr <- pairwise_corr + theme(strip.placement = "outside",
+                        text = element_text(size = 9 , face = "bold")) +
+                               ggtitle("Gene correlation") + 
+                        theme(plot.title = element_text(size = 15, hjust = 0.5)) +
+                        ylab("log2(counts +1)") + 
+                        xlab("log2 (counts +1)")
+   
+   pairwise_corr
+}
+
+```
+
+**NOTE** : Any continuous variable (e.g. viral load expressed as Ct) could be included in the analysis of correlation with gene expression (Bizzotto _et al._, 2020), Figure 4A).
+
+1. Plot gene expression correlation between two genes and include viral load (expressed as Ct) in a color scale (Figure 3B.i) and calculate the Spearman correlation coefficient (Figure 3B.ii)
+
+```{r 17, message=FALSE, warning=FALSE, paged.print=FALSE}
+MX1_MX2 <- ggplot(NULL, aes(x = log2(t(norm_counts["MX1",]+1)[which(clindata$positivity=="COVID19" &  
+    clindata$ct != "Unknown")]), y = log2(t(norm_counts["MX2",]+1))[which(clindata$positivity=="COVID19"& clindata$ct != "Unknown")], color = as.integer(clindata$ct[(which(clindata$positivity=="COVID19" & clindata$ct != "Unknown"))]))) +
+    geom_point(size = 4, na.rm = TRUE) +
+    scale_color_gradientn(colours=c("red","white","blue"), name = "Viral load (ct)") +
+    ylab("MX2 expression RNA-seq \n log2 (norm counts +1)") +
+    xlab("MX1 expression RNA-seq \n log2 (norm counts +1)") +
+    theme(legend.position = "bottom") +
+    theme_bw() +
+    theme(axis.text = element_text(size = 15),
+          axis.title = element_text(size = 15),
+          plot.title =element_text(size = 25))
+MX1_MX2 
+
+
+MX1_MX2stat <-cor.test(norm_counts["MX1",]  
+                       [which(clindata$positivity=="COVID19")],
+                       norm_counts["MX2",]
+                       [which(clindata$positivity=="COVID19")],
+                       method = "spearman")
+MX1_MX2stat
+```
+## Patient segregation based on gene expression
+
+**Timing: 1 day**
+
+Principal-component analysis (PCA) is a dimensionality reduction technique used to increase the interpretability of a given dataset, minimizing information loss and maximizing variance.
+
+1. Principal component analysis based on disease status:
+
+1. Calculate the principal component on the log2 transformed gene expression data. The output is a table as shown in Figure 4A, containing the weight of each gene in the variance of the samples for Principal Component 1 (PC1; the largest component of variance in the data set) and Principal Component 2 (PC2; the second most important component influencing the variance):
+
+
+```{r 18, message=FALSE, warning=FALSE, paged.print=FALSE}
+# res.pca <- prcomp(t(log2(norm_counts[c("gene1","gene2", "geneN"),]+1)), 
+#                   scale = TRUE)   
+
+res.pca <- prcomp(t(log2(norm_counts[c("MX1","ACE2", "BSG"),]+1)), 
+                   scale = TRUE)
+
+#replace gene1, gene2, geneN by the list of genes of your interest
+
+res.pca
+```
+
+**NOTE** : For PCA we only considered expression of the candidate genes, but you might also include any independent variable you consider to affect the variability among samples.
+
+1. Plot PC1 _vs_. PC2 (Figure 4B):
+
+```{r 19, message=FALSE, warning=FALSE, paged.print=FALSE}
+# {
+#    p<- fviz_pca_biplot(res.pca, col.ind = clindata$[positivity],
+#                     geom = "point",
+#                     addEllipses = TRUE,
+#                     palette = c('#F8766D', '#00BFC4'),
+#                     title='Principal Component Analysis')
+#    p
+# }
+
+#replace the variable between [] for any variable of your interest, and remove the []
+
+{
+   p<- fviz_pca_biplot(res.pca, col.ind = clindata$positivity,
+                    geom = "point",
+                    addEllipses = TRUE,
+                    palette = c('#F8766D', '#00BFC4'),
+                    title='Principal Component Analysis')
+   p
+}
+
+```
+
+1. 3D graphs showing expression for the selected genes can be plotted as follows. The output is shown in Figure 4C:
+
+```{r 20, message=FALSE, warning=FALSE, paged.print=FALSE}
+
+canvasXpress(
+   data=t(log2(norm_counts[c("MX1","ACE2","BSG"),]+1)),
+   varAnnot=as.data.frame(clindata$positivity, 
+   row.names=rownames(clindata)),
+   axisTickScaleFontFactor=0.6,
+   axisTitleScaleFontFactor=0.6,
+   ellipseBy="clindata$positivity",
+   colorBy="clindata$positivity",
+   colorKey=list("clindata$positivity"=list("COVID19"="#F8766D", 
+   "HEALTHY"="#00BFC4")),
+   graphType="Scatter3D",
+   title="3D scatter plot",
+   xAxis=list("ACE2"),
+   yAxis=list("BSG"),
+   zAxis=list("MX1"),
+   showLoessFit = FALSE)
+```
+
+
+# Expected Outcomes
+Plots in Figure 2 depicts dot plots of gene expression separating patients according to different phenotypic data, such as disease status (Figure 2A) and age (Figure 2B), and the output of the statistical tests. The color code for these analyses is: red = SARS-CoV-2 negative patients, and blue = SARS-CoV-2 positive patients.
+
+In order to evaluate the association between different parameters, such as gene expression and viral load, we performed pairwise correlation analysis explained in the &quot;Correlation Analysis&quot; section. The outcome is a scatter plot and the Spearman coefficient (rho) with the associated P-value for each comparison. Figure 3A shows the pairwise correlation plots and statistics. Figure 3B shows the scatter plot for the correlation between two genes and viral load as color-coded dots.
+
+Finally, it is possible to visualize patient segregation by PCA using the selected genes (Bizzotto _et al._, 2020) as independent variables (Figures 4A and B). 3D scatter plots can be done. These plots depict gene expression and 95% confidence ellipsoids (Figure 4C).
+
+# Quantification and Statistical Analysis
+
+Eligibility criteria, statistical tests and software used for this protocol are properly described in the &quot;Before you Begin&quot; and &quot;Step-by-Step Methods Details&quot; sections.
+
+# Limitations
+
+This protocol relies on the accuracy of the clinical records submitted to the public repository by the original authors. For some datasets, RNA-sequencing raw counts data may not be available, and data could have been pre-processed by the original authors, thus limiting the decision making of which sequence quality will comply with the own standards, usage of different alignment software and algorithms, reference genome, etc. However, there are still some quality controls that might be done. As we mentioned in (Bizzotto _et al._, 2020), we detected that some samples had 0 counts for most genes (\&gt;70% genes), suggesting a very low quality RNA isolation and/or sequencing. Therefore, we were able to remove them from the analysis. We strongly suggest performing all possible quality controls before analyzing the data.
+
+# Troubleshooting
+
+It is important that when working in R, and following this protocol, take into consideration the critical steps mentioned as &quot;notes&quot; for each step provided in the method details.
+
+## Problem 1
+
+When running a piece of code, the output is not the expected (i.e., error message in the console or an unexpected feature in the plot).
+
+## Potential solution
+
+For the proper execution of the piece of code, the syntax must be accurate, so it is important to check whether there are no syntax mistakes, such as:
+
+- Forgotten comma.
+- Unclosed bracket, parenthesis, or quotes.
+- Misspelled function or filenames.
+
+## Problem 2
+
+The raw counts for a specific dataset are available as a separate file, but it is not clear for the user whether they are raw counts or pre-processed data.
+
+## Potential Solution
+
+It is important to verify that the data represent raw counts. This can be checked by staring the GEO submission description and the Methods section within the corresponding citation.
+
+## Problem 3
+
+The phenotypic and count matrices do not contain the same list of samples.
+
+## Potential Solution
+
+It is important to verify that the phenotypic and counts matrices correspond the same list of samples in order to merge phenotypic and gene expression data. If not, discard incomplete samples. This can be achieved using the following command, which creates a table only with the samples included in both matrices:
+
+
+```{r 21, message=FALSE, warning=FALSE, paged.print=FALSE}
+common_names= intersect(rownames(clindata), colnames(raw_counts))
+clindata = clindata[rownames(clindata) %in% common_names,]
+raw_counts = raw_counts[,colnames(raw_counts) %in% common_names]
+```
+
+## Problem 4
+
+There is a great number of genes with 0 counts.
+
+## Potential Solution:
+
+Samples considered to have low quality read sequencing should be removed from the analysis since they may introduce noise to the results. The following code is an example of how this can be achieved in R Studio when samples in the dataset have \&gt;70% genes with 0 counts:
+
+
+```{r 22, message=FALSE, warning=FALSE, paged.print=FALSE,}
+#see how many genes per sample have 0 reads
+zero <- colSums(norm_counts == 0)/nrow(norm_counts)
+hist(zero, breaks = 50)
+abline(v = 0.7, col="red")
+summary(zero)
+
+#select only those samples with less than 70% of genes with zero
+good_samples <- zero <0.7
+norm_counts <- norm_counts[,good_samples]
+```
+
+
+Resource Availability
+
+_ **Lead Contact** _
+
+Further information and requests for resources and reagents should be directed to and will be fulfilled by the Lead Contact, Geraldine Gueron, ggueron@gmail.com.
+
+_ **Data and Code Availability** _
+
+The code generated during this study is available at GitHub repository accessible using the following link: [https://github.com/lab-inflamacionycancer/STAR-protocol-Sanchis.et.al](https://github.com/lab-inflamacionycancer/STAR-protocol-Sanchis.et.al).
+
+# Acknowledgments
+
+This work was supported by grants from AGENCIA-PICT-2016-0056 (Argentina) and AGENCIA-PICT-RAICES-2018-02639 (Argentina).
+
+# Author Contributions
+
+Conceptualization, J.B., P.S., R.L., S.L.V., E.V., J.C., and G.G; Formal Analysis J.B., P.S., RL and M.A. Investigation, J.B., P.S., R.L., M.A., S.L.V., E.V., J.C., and G.G; Resources, J.C., and G.G.; Data Curation, J.B., P.S., R.L., M.A. S.L.V., E.V., J.C., and G.G. Writing preparation, J.B., P.S., R.L., S.L.V., J.C., and G.G; Writing – Review and Editing, J.B., P.S., R.L.,S.L.V., E.V., J.C., and G.G.; Funding, E.V., J.C., and G.G.; All authors have read and agreed to the published version of the manuscript.
+
+# Declaration of Interests
+
+The authors declare no competing interests.
+
+# References
+
+Arif, A. _et al._ (2015) _Non-Parametric Test for Ordered Medians: The Jonckheere Terpstra Test_. Available at: https://www.lifescienceglobal.com/91-abstract/ijsmr/1609-abstract-non-parametric-test-for-ordered-medians-the-jonckheere-terpstra-test.
+
+Athar, A. _et al._ (2019) &#39;ArrayExpress update – from bulk to single-cell expression data&#39;, _Nucleic Acids Research_, 47(D1), pp. D711–D715. doi: 10.1093/nar/gky964.
+
+Barrett, T. _et al._ (2012) &#39;NCBI GEO: archive for functional genomics data sets—update&#39;, _Nucleic Acids Research_, 41(D1), pp. D991–D995. doi: 10.1093/nar/gks1193.
+
+Bizzotto, J. _et al._ (2020) &#39;SARS-CoV-2 Infection Boosts MX1 Antiviral Effector in COVID-19 Patients&#39;, _iScience_, 23(10), p. 101585. doi: 10.1016/j.isci.2020.101585.
+
+Davis, S. and Meltzer, P. S. (2007) &#39;GEOquery: a bridge between the Gene Expression Omnibus (GEO) and BioConductor&#39;, _Bioinformatics_, 23(14), pp. 1846–1847. doi: 10.1093/bioinformatics/btm254.
+
+Evans, C., Hardin, J. and Stoebel, D. M. (no date) &#39;Selecting between-sample RNA-Seq normalization methods from the perspective of their assumptions&#39;, p. 17.
+
+Kassambara, A. and Mundt, F. (2020) _factoextra: Extract and Visualize the Results of Multivariate Data Analyses_. Available at: https://rpkgs.datanovia.com/factoextra/index.html.
+
+Lieberman, N. A. P. _et al._ (2020) &#39;In vivo antiviral host transcriptional response to SARS-CoV-2 by viral load, sex, and age&#39;, _PLOS Biology_. Edited by K. Cadwell, 18(9), p. e3000849. doi: 10.1371/journal.pbio.3000849.
+
+Love, M. I., Huber, W. and Anders, S. (2014) &#39;Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2&#39;, _Genome Biology_, 15(12), p. 550. doi: 10.1186/s13059-014-0550-8.
+
+Neuhaus, I. and Brett, C. (2020) _canvasXpress: Visualization Package for CanvasXpress in R_. Available at: http://www.canvasxpress.org/.
+
+R Core Team (2013) _R: A language and environment for statistical computing._ Vienna, Austria: R Foundation for Statistical Computing.
+
+RStudio Team (2020) _RStudio: Integrated Development for R._
+
+Schloerke, B. _et al._ (2020) _GGally: Extension to &#39;ggplot2&#39;_. Available at: https://github.com/ggobi/ggally/.
+
+Seshan, V. (2018) _clinfun: Clinical Trial Design and Data Analysis Functions_. Available at: https://github.com/veseshan/clinfun.
+
+Wickham, H. (2016) _ggplot2: Elegant Graphics for Data Analysis._ New York: Springer. Available at: https://ggplot2.tidyverse.org/.
+
+
